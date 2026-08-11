@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getSupabaseUser } from "../../supabase-server";
 import { getD1 } from "../../../db";
 
 type AccountRow = {
@@ -11,14 +11,16 @@ type AccountRow = {
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "info@mattiasp.se").trim().toLowerCase();
 
-export async function GET() {
-  const identity = await getChatGPTUser();
+export async function GET(request: Request) {
+  const identity = await getSupabaseUser(request);
   if (!identity) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
   const db = getD1();
-  const role = identity.email.trim().toLowerCase() === ADMIN_EMAIL ? "admin" : "user";
+  const email = identity.email ?? "";
+  const fullName = typeof identity.user_metadata?.full_name === "string" ? identity.user_metadata.full_name : null;
+  const role = email.trim().toLowerCase() === ADMIN_EMAIL ? "admin" : "user";
   await db.prepare(`
     INSERT INTO app_users (id, email, full_name, role, created_at, updated_at)
     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -27,7 +29,7 @@ export async function GET() {
       full_name = COALESCE(excluded.full_name, app_users.full_name),
       role = excluded.role,
       updated_at = CURRENT_TIMESTAMP
-  `).bind(identity.id, identity.email, identity.fullName, role).run();
+  `).bind(identity.id, email, fullName, role).run();
 
   const account = await db.prepare(
     "SELECT id, email, full_name, role FROM app_users WHERE id = ? LIMIT 1",
@@ -37,8 +39,8 @@ export async function GET() {
     authenticated: true,
     user: {
       id: account?.id ?? identity.id,
-      email: account?.email ?? identity.email,
-      name: account?.full_name ?? identity.displayName,
+      email: account?.email ?? email,
+      name: account?.full_name ?? fullName ?? email,
       role: account?.role ?? "user",
     },
   });

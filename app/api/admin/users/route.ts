@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { getSupabaseUser } from "../../../supabase-server";
 import { getD1 } from "../../../../db";
 
-export async function GET() {
-  const identity = await getChatGPTUser();
+export async function GET(request: Request) {
+  const identity = await getSupabaseUser(request);
   if (!identity) return NextResponse.json({ error: "Inte inloggad" }, { status: 401 });
 
   const db = getD1();

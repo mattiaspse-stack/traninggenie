@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { getSupabaseBrowserClient } from "./supabase";
 
 type View = "hem" | "pass" | "statistik" | "planer" | "profil";
 type AccountSession = { id: string; email: string; name: string; role: "admin" | "user" };
@@ -21,7 +22,8 @@ const exercises = [
 
 export default function Home() {
   const [session, setSession] = useState<AccountSession | null>(null);
-  const [authState, setAuthState] = useState<"checking" | "authenticated" | "anonymous" | "error">("checking");
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "anonymous" | "error">(() => getSupabaseBrowserClient() ? "checking" : "error");
   const [view, setView] = useState<View>("hem");
   const [plan, setPlan] = useState(defaultPlan);
   const [coach, setCoach] = useState<CoachReply>({ summary: "Jag analyserar din återhämtning, historik och veckomål…" });
@@ -32,7 +34,7 @@ export default function Home() {
   const askAI = async (mode: "daily" | "plan" | "adapt" | "chat", message = "") => {
     setLoading(true);
     try {
-      const response = await fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, message, profile: { goal: "Bygga styrka och springa 10 km", level: "Van", days: 4 }, context: { sleep: 7.4, readiness: 82, recent: "Överkropp i går, löpning för tre dagar sedan" } }) });
+      const response = await fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ mode, message, profile: { goal: "Bygga styrka och springa 10 km", level: "Van", days: 4 }, context: { sleep: 7.4, readiness: 82, recent: "Överkropp i går, löpning för tre dagar sedan" } }) });
       const data = await response.json() as CoachReply;
       setCoach(data);
       if (data.plan) setPlan(data.plan);
@@ -42,27 +44,34 @@ export default function Home() {
   };
 
   useEffect(() => {
-    void fetch("/api/session", { cache: "no-store" })
-      .then(async (response) => {
-        if (response.status === 401) { setAuthState("anonymous"); return; }
-        if (!response.ok) throw new Error("session");
-        const data = await response.json() as { user: AccountSession };
-        setSession(data.user);
-        setAuthState("authenticated");
-      })
-      .catch(() => setAuthState("error"));
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    const loadProfile = async (token: string | null) => {
+      if (!token) { setSession(null); setAccessToken(null); setAuthState("anonymous"); return; }
+      setAccessToken(token);
+      const response = await fetch("/api/session", { cache: "no-store", headers: { authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error("session");
+      const data = await response.json() as { user: AccountSession };
+      setSession(data.user);
+      setAuthState("authenticated");
+    };
+    void supabase.auth.getSession().then(({ data }) => loadProfile(data.session?.access_token ?? null)).catch(() => setAuthState("error"));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, current) => {
+      void loadProfile(current?.access_token ?? null).catch(() => setAuthState("error"));
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (authState !== "authenticated") return;
     const controller = new AbortController();
-    fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "daily", profile: { goal: "Bygga styrka och springa 10 km", level: "Van", days: 4 }, context: { sleep: 7.4, readiness: 82, recent: "Överkropp i går, löpning för tre dagar sedan" } }), signal: controller.signal })
+    fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ mode: "daily", profile: { goal: "Bygga styrka och springa 10 km", level: "Van", days: 4 }, context: { sleep: 7.4, readiness: 82, recent: "Överkropp i går, löpning för tre dagar sedan" } }), signal: controller.signal })
       .then(response => response.json())
       .then((data: CoachReply) => setCoach(data))
       .catch(error => { if (error instanceof Error && error.name !== "AbortError") setCoach({ summary: "Jag kunde inte nå AI-coachen just nu.", source: "error" }); })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [authState]);
+  }, [authState, accessToken]);
 
   if (authState !== "authenticated" || !session) return <AuthScreen state={authState} />;
 
@@ -75,7 +84,7 @@ export default function Home() {
           {view === "pass" && <Workout open={sessionOpen} onStart={() => setSessionOpen(true)} onAdapt={() => { setCoachOpen(true); void askAI("adapt"); }} />}
           {view === "statistik" && <Statistics />}
           {view === "planer" && <Planner plan={plan} loading={loading} onGenerate={() => void askAI("plan")} />}
-          {view === "profil" && <Profile session={session} />}
+          {view === "profil" && <Profile session={session} accessToken={accessToken ?? ""} />}
         </div>
         <BottomNav view={view} setView={setView} />
         <button className="ai-fab" onClick={() => setCoachOpen(true)} aria-label="Öppna AI-coachen"><span>✦</span></button>
@@ -87,13 +96,31 @@ export default function Home() {
 
 function AuthScreen({ state }: { state: "checking" | "authenticated" | "anonymous" | "error" }) {
   const checking = state === "checking";
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) { setMessage("Supabase-nyckeln saknas i .env."); return; }
+    setPending(true); setMessage("");
+    const result = mode === "signup"
+      ? await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } })
+      : await supabase.auth.signInWithPassword({ email, password });
+    setPending(false);
+    if (result.error) { setMessage(result.error.message); return; }
+    if (mode === "signup" && !result.data.session) setMessage("Kontot är skapat. Bekräfta länken som skickats till din e-post.");
+  };
   return <main className="stage"><section className="phone-app auth-phone"><div className="auth-screen">
-    <Image src="/traningsgenie-brand-v2.png" width={300} height={120} alt="TräningsGenie" priority />
+    <div className="auth-logo" aria-label="TräningsGenie"><span>TRÄNINGS</span><b>GENIE</b></div>
     <span className="auth-orb">✦</span>
     <small>PERSONLIG TRÄNING · DRIVEN AV AI</small>
-    <h1>{checking ? "Förbereder din profil…" : state === "error" ? "Databasen behöver aktiveras" : "Din träning börjar här."}</h1>
-    <p>{checking ? "Vi kontrollerar din säkra inloggning." : state === "error" ? "Försök igen när databasen är publicerad och redo." : "Logga in för att spara pass, följa utvecklingen och få en plan som lär känna dig."}</p>
-    {!checking && state !== "error" && <a className="gradient-button auth-button" href="/signin-with-chatgpt?return_to=%2F">Logga in med ChatGPT</a>}
+    <h1>{checking ? "Förbereder din profil…" : state === "error" ? "Inloggningen behöver konfigureras" : mode === "login" ? "Välkommen tillbaka." : "Skapa ditt konto."}</h1>
+    <p>{checking ? "Vi kontrollerar din säkra inloggning." : state === "error" ? "Lägg Supabase URL och publishable key i projektets .env-fil." : "Spara pass, följ utvecklingen och få en plan som lär känna dig."}</p>
+    {!checking && state !== "error" && <><div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setMessage(""); }}>Logga in</button><button className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setMessage(""); }}>Skapa konto</button></div><form className="auth-form" onSubmit={submit}>{mode === "signup" && <label><span>Namn</span><input required autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Ditt namn" /></label>}<label><span>E-post</span><input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="namn@exempel.se" /></label><label><span>Lösenord</span><input required minLength={8} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={event => setPassword(event.target.value)} placeholder="Minst 8 tecken" /></label>{message && <p className="auth-message" role="status">{message}</p>}<button className="gradient-button auth-button" disabled={pending}>{pending ? "Vänta…" : mode === "login" ? "Logga in" : "Skapa konto"}</button></form></>}
     {state === "error" && <button className="gradient-button auth-button" onClick={() => location.reload()}>Försök igen</button>}
     <em>Din träningsdata är privat och kopplad till ditt konto.</em>
   </div></section></main>;
@@ -135,16 +162,16 @@ function Statistics() {
   return <div className="view"><PageTop title="Statistik" /><div className="stats-tabs"><button className="active">Översikt</button><button>Träning</button><button>Kropp</button></div><div className="period">Denna vecka⌄</div><div className="metric-grid">{metrics.map((m,i)=><div key={m[0]}><small>{m[0]}</small><strong>{m[1]}</strong><em className={i===3?"red":""}>{m[2]}</em>{i<2&&<div className={i===0?"mini-bars":"mini-line"}>{i===0?[30,55,36,62,50,80,64].map((h,j)=><i key={j} style={{height:h}}/>):"⌁⌁⌁⌁"}</div>}</div>)}</div><section className="progress-card"><label>AI-PROGNOS · 8 VECKOR</label><h2>+7,5 kg i bänkpress</h2><p>Om du följer nuvarande plan med minst 85% kontinuitet.</p><div className="forecast-line">⌁⌁⌁⌁⌁</div></section></div>;
 }
 
-function Profile({ session }: { session: AccountSession }) {
+function Profile({ session, accessToken }: { session: AccountSession; accessToken: string }) {
   const initials = session.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase();
   const [userCount, setUserCount] = useState<number | null>(null);
   const loadUsers = async () => {
-    const response = await fetch("/api/admin/users");
+    const response = await fetch("/api/admin/users", { headers: { authorization: `Bearer ${accessToken}` } });
     if (!response.ok) return;
     const data = await response.json() as { users: unknown[] };
     setUserCount(data.users.length);
   };
-  return <div className="view"><PageTop title="Profil" /><div className="profile-hero"><span>{initials}</span><h2>{session.name}</h2><small>{session.role === "admin" ? "Administratör" : "Medlem"} · {session.email}</small></div><div className="profile-list"><button><span>◎</span><b>Mål & nivå</b><small>Styrka · 10 km</small><i>›</i></button><button><span>◷</span><b>Tillgänglig tid</b><small>4 pass / vecka</small><i>›</i></button><button><span>♡</span><b>Återhämtning</b><small>Apple Hälsa ansluten</small><i>›</i></button><button><span>✦</span><b>AI-inställningar</b><small>Proaktiv coachning på</small><i>›</i></button>{session.role === "admin" && <button onClick={() => void loadUsers()}><span>⚙</span><b>Administration</b><small>{userCount === null ? "Hantera användare" : `${userCount} registrerade användare`}</small><i>›</i></button>}<a className="profile-signout" href="/signout-with-chatgpt?return_to=%2F">Logga ut</a></div></div>;
+  return <div className="view"><PageTop title="Profil" /><div className="profile-hero"><span>{initials}</span><h2>{session.name}</h2><small>{session.role === "admin" ? "Administratör" : "Medlem"} · {session.email}</small></div><div className="profile-list"><button><span>◎</span><b>Mål & nivå</b><small>Styrka · 10 km</small><i>›</i></button><button><span>◷</span><b>Tillgänglig tid</b><small>4 pass / vecka</small><i>›</i></button><button><span>♡</span><b>Återhämtning</b><small>Apple Hälsa ansluten</small><i>›</i></button><button><span>✦</span><b>AI-inställningar</b><small>Proaktiv coachning på</small><i>›</i></button>{session.role === "admin" && <button onClick={() => void loadUsers()}><span>⚙</span><b>Administration</b><small>{userCount === null ? "Hantera användare" : `${userCount} registrerade användare`}</small><i>›</i></button>}<button className="profile-signout" onClick={() => void getSupabaseBrowserClient()?.auth.signOut()}>Logga ut</button></div></div>;
 }
 
 function CoachSheet({ coach, loading, onClose, onAsk }: { coach: CoachReply; loading: boolean; onClose: () => void; onAsk: (s:string)=>void }) {

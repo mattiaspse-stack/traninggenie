@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getSupabaseUser } from "../../supabase-server";
 
 const fallback = {
   daily: { title: "Styrka passar bäst idag", summary: "Din återhämtning är god. Kör överkroppspasset och håll två repetitioner i reserv i de tyngsta seten.", reason: "Baserat på 7,4 timmars sömn, träningshistorik och veckomål." },
@@ -14,7 +14,7 @@ const fallback = {
 } as const;
 
 export async function POST(request: Request) {
-  if (!await getChatGPTUser()) {
+  if (!await getSupabaseUser(request)) {
     return NextResponse.json({ error: "Inte inloggad" }, { status: 401 });
   }
   const body = await request.json().catch(() => ({}));

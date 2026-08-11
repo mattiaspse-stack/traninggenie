@@ -9,7 +9,10 @@ test("contains the TräningsGenie product experience", async () => {
   assert.match(source, /Skapa ny plan med AI/);
   assert.match(source, /AI-anpassa passet/);
   assert.match(source, /workout-hero\.png/);
-  assert.match(source, /Logga in med ChatGPT/);
+  assert.match(source, /Logga in/);
+  assert.match(source, /Skapa konto/);
+  assert.match(source, /signInWithPassword/);
+  assert.match(source, /auth-logo/);
   assert.match(source, /Administration/);
   assert.doesNotMatch(source, /codex-preview|react-loading-skeleton/i);
 });
