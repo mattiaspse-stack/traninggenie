@@ -13,7 +13,7 @@ test("contains the TräningsGenie product experience", async () => {
   assert.match(source, /Begär inbjudan/);
   assert.match(source, /signInWithPassword/);
   assert.doesNotMatch(source, /signUp\(/);
-  assert.match(source, /auth-logo/);
+  assert.match(source, /training-genie-logo\.png/);
   assert.match(source, /Administration/);
   assert.doesNotMatch(source, /codex-preview|react-loading-skeleton/i);
 });

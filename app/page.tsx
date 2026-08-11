@@ -119,7 +119,7 @@ function AuthScreen({ state }: { state: "checking" | "authenticated" | "anonymou
     if (result.error) { setMessage(result.error.message); return; }
   };
   return <main className="stage"><section className="phone-app auth-phone"><div className="auth-screen">
-    <div className="auth-logo" aria-label="TräningsGenie"><span>TRÄNINGS</span><b>GENIE</b></div>
+    <Image className="auth-logo-image" src="/training-genie-logo.png" width={1254} height={1254} alt="Training Genie" priority />
     <span className="auth-orb">✦</span>
     <small>PERSONLIG TRÄNING · DRIVEN AV AI</small>
     <h1>{checking ? "Förbereder din profil…" : state === "error" ? "Inloggningen behöver konfigureras" : mode === "login" ? "Välkommen tillbaka." : "Begär en inbjudan."}</h1>
