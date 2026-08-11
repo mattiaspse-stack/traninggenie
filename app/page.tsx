@@ -96,31 +96,35 @@ export default function Home() {
 
 function AuthScreen({ state }: { state: "checking" | "authenticated" | "anonymous" | "error" }) {
   const checking = state === "checking";
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "request">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [requestMessage, setRequestMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) { setMessage("Supabase-nyckeln saknas i .env."); return; }
     setPending(true); setMessage("");
-    const result = mode === "signup"
-      ? await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } })
-      : await supabase.auth.signInWithPassword({ email, password });
+    if (mode === "request") {
+      const response = await fetch("/api/invitations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, email, message: requestMessage }) });
+      setPending(false);
+      setMessage(response.ok ? "Tack! Din förfrågan är skickad och väntar på granskning." : "Förfrågan kunde inte skickas. Kontrollera uppgifterna.");
+      return;
+    }
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) { setPending(false); setMessage("Supabase-nyckeln saknas i .env."); return; }
+    const result = await supabase.auth.signInWithPassword({ email, password });
     setPending(false);
     if (result.error) { setMessage(result.error.message); return; }
-    if (mode === "signup" && !result.data.session) setMessage("Kontot är skapat. Bekräfta länken som skickats till din e-post.");
   };
   return <main className="stage"><section className="phone-app auth-phone"><div className="auth-screen">
     <div className="auth-logo" aria-label="TräningsGenie"><span>TRÄNINGS</span><b>GENIE</b></div>
     <span className="auth-orb">✦</span>
     <small>PERSONLIG TRÄNING · DRIVEN AV AI</small>
-    <h1>{checking ? "Förbereder din profil…" : state === "error" ? "Inloggningen behöver konfigureras" : mode === "login" ? "Välkommen tillbaka." : "Skapa ditt konto."}</h1>
-    <p>{checking ? "Vi kontrollerar din säkra inloggning." : state === "error" ? "Lägg Supabase URL och publishable key i projektets .env-fil." : "Spara pass, följ utvecklingen och få en plan som lär känna dig."}</p>
-    {!checking && state !== "error" && <><div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setMessage(""); }}>Logga in</button><button className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setMessage(""); }}>Skapa konto</button></div><form className="auth-form" onSubmit={submit}>{mode === "signup" && <label><span>Namn</span><input required autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Ditt namn" /></label>}<label><span>E-post</span><input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="namn@exempel.se" /></label><label><span>Lösenord</span><input required minLength={8} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={event => setPassword(event.target.value)} placeholder="Minst 8 tecken" /></label>{message && <p className="auth-message" role="status">{message}</p>}<button className="gradient-button auth-button" disabled={pending}>{pending ? "Vänta…" : mode === "login" ? "Logga in" : "Skapa konto"}</button></form></>}
+    <h1>{checking ? "Förbereder din profil…" : state === "error" ? "Inloggningen behöver konfigureras" : mode === "login" ? "Välkommen tillbaka." : "Begär en inbjudan."}</h1>
+    <p>{checking ? "Vi kontrollerar din säkra inloggning." : state === "error" ? "Lägg Supabase URL och publishable key i projektets .env-fil." : mode === "login" ? "Logga in för att fortsätta din träning." : "Berätta vem du är så återkommer vi när din medlemsansökan har granskats."}</p>
+    {!checking && state !== "error" && <><div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setMessage(""); }}>Logga in</button><button className={mode === "request" ? "active" : ""} onClick={() => { setMode("request"); setMessage(""); }}>Begär inbjudan</button></div><form className="auth-form" onSubmit={submit}>{mode === "request" && <label><span>Namn</span><input required autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Ditt namn" /></label>}<label><span>E-post</span><input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="namn@exempel.se" /></label>{mode === "login" ? <label><span>Lösenord</span><input required minLength={8} type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Ditt lösenord" /></label> : <label><span>Kort meddelande (valfritt)</span><textarea maxLength={500} value={requestMessage} onChange={event => setRequestMessage(event.target.value)} placeholder="Varför vill du bli medlem?" /></label>}<input className="auth-honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" name="website" />{message && <p className="auth-message" role="status">{message}</p>}<button className="gradient-button auth-button" disabled={pending}>{pending ? "Vänta…" : mode === "login" ? "Logga in" : "Skicka förfrågan"}</button></form></>}
     {state === "error" && <button className="gradient-button auth-button" onClick={() => location.reload()}>Försök igen</button>}
     <em>Din träningsdata är privat och kopplad till ditt konto.</em>
   </div></section></main>;
@@ -165,13 +169,15 @@ function Statistics() {
 function Profile({ session, accessToken }: { session: AccountSession; accessToken: string }) {
   const initials = session.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase();
   const [userCount, setUserCount] = useState<number | null>(null);
+  const [pendingInvitations, setPendingInvitations] = useState<number | null>(null);
   const loadUsers = async () => {
     const response = await fetch("/api/admin/users", { headers: { authorization: `Bearer ${accessToken}` } });
     if (!response.ok) return;
-    const data = await response.json() as { users: unknown[] };
+    const data = await response.json() as { users: unknown[]; pendingInvitations: number };
     setUserCount(data.users.length);
+    setPendingInvitations(data.pendingInvitations);
   };
-  return <div className="view"><PageTop title="Profil" /><div className="profile-hero"><span>{initials}</span><h2>{session.name}</h2><small>{session.role === "admin" ? "Administratör" : "Medlem"} · {session.email}</small></div><div className="profile-list"><button><span>◎</span><b>Mål & nivå</b><small>Styrka · 10 km</small><i>›</i></button><button><span>◷</span><b>Tillgänglig tid</b><small>4 pass / vecka</small><i>›</i></button><button><span>♡</span><b>Återhämtning</b><small>Apple Hälsa ansluten</small><i>›</i></button><button><span>✦</span><b>AI-inställningar</b><small>Proaktiv coachning på</small><i>›</i></button>{session.role === "admin" && <button onClick={() => void loadUsers()}><span>⚙</span><b>Administration</b><small>{userCount === null ? "Hantera användare" : `${userCount} registrerade användare`}</small><i>›</i></button>}<button className="profile-signout" onClick={() => void getSupabaseBrowserClient()?.auth.signOut()}>Logga ut</button></div></div>;
+  return <div className="view"><PageTop title="Profil" /><div className="profile-hero"><span>{initials}</span><h2>{session.name}</h2><small>{session.role === "admin" ? "Administratör" : "Medlem"} · {session.email}</small></div><div className="profile-list"><button><span>◎</span><b>Mål & nivå</b><small>Styrka · 10 km</small><i>›</i></button><button><span>◷</span><b>Tillgänglig tid</b><small>4 pass / vecka</small><i>›</i></button><button><span>♡</span><b>Återhämtning</b><small>Apple Hälsa ansluten</small><i>›</i></button><button><span>✦</span><b>AI-inställningar</b><small>Proaktiv coachning på</small><i>›</i></button>{session.role === "admin" && <button onClick={() => void loadUsers()}><span>⚙</span><b>Administration</b><small>{userCount === null ? "Hantera medlemmar" : `${userCount} medlemmar · ${pendingInvitations ?? 0} väntar`}</small><i>›</i></button>}<button className="profile-signout" onClick={() => void getSupabaseBrowserClient()?.auth.signOut()}>Logga ut</button></div></div>;
 }
 
 function CoachSheet({ coach, loading, onClose, onAsk }: { coach: CoachReply; loading: boolean; onClose: () => void; onAsk: (s:string)=>void }) {

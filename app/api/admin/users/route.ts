@@ -16,5 +16,8 @@ export async function GET(request: Request) {
   const result = await db.prepare(
     "SELECT id, email, full_name AS name, role, created_at AS createdAt FROM app_users ORDER BY created_at DESC LIMIT 100",
   ).all();
-  return NextResponse.json({ users: result.results });
+  const pending = await db.prepare(
+    "SELECT COUNT(*) AS count FROM membership_requests WHERE status = 'pending'",
+  ).first<{ count: number }>();
+  return NextResponse.json({ users: result.results, pendingInvitations: pending?.count ?? 0 });
 }

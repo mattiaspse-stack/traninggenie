@@ -12,7 +12,7 @@ npm run dev
 
 ## Inloggning och databas
 
-Appen använder Supabase Auth för registrering och inloggning med e-post/lösenord, samt en beständig D1-databas för träningsdata. Konton skapas i appens `Skapa konto`-flöde. Kontot som matchar `ADMIN_EMAIL` får administratörsrollen; övriga konton får vanlig användarroll.
+Appen använder Supabase Auth för inloggning med e-post/lösenord, samt en beständig D1-databas för träningsdata och medlemsansökningar. Nya personer använder `Begär inbjudan`; ansökan sparas för administratörens granskning. Kontot som matchar `ADMIN_EMAIL` får administratörsrollen.
 
 Databasen lagrar användarprofiler, roller, träningspass, set och träningsplaner. Schemat finns i `db/schema.ts` och den genererade migreringen i `drizzle/`.
 

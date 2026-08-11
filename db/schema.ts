@@ -10,6 +10,17 @@ export const users = sqliteTable("app_users", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const membershipRequests = sqliteTable("membership_requests", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  fullName: text("full_name").notNull(),
+  message: text("message"),
+  status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+  requestedAt: text("requested_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  reviewedAt: text("reviewed_at"),
+  reviewedBy: text("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+}, (table) => [index("idx_membership_requests_status_requested").on(table.status, table.requestedAt)]);
+
 export const workouts = sqliteTable("workouts", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

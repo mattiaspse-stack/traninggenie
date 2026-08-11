@@ -10,8 +10,9 @@ test("contains the TräningsGenie product experience", async () => {
   assert.match(source, /AI-anpassa passet/);
   assert.match(source, /workout-hero\.png/);
   assert.match(source, /Logga in/);
-  assert.match(source, /Skapa konto/);
+  assert.match(source, /Begär inbjudan/);
   assert.match(source, /signInWithPassword/);
+  assert.doesNotMatch(source, /signUp\(/);
   assert.match(source, /auth-logo/);
   assert.match(source, /Administration/);
   assert.doesNotMatch(source, /codex-preview|react-loading-skeleton/i);
@@ -23,6 +24,12 @@ test("database migration creates accounts and training data", async () => {
   assert.match(migration, /CREATE TABLE `workouts`/);
   assert.match(migration, /CREATE TABLE `exercise_sets`/);
   assert.match(migration, /CREATE TABLE `training_plans`/);
+});
+
+test("membership requests are stored for admin review", async () => {
+  const route = await readFile(new URL("../app/api/invitations/route.ts", import.meta.url), "utf8");
+  assert.match(route, /membership_requests/);
+  assert.match(route, /status = 'pending'/);
 });
 
 test("admin account is explicitly configured", async () => {
