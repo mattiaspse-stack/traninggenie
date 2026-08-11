@@ -118,7 +118,15 @@ function AuthScreen({ state }: { state: "checking" | "authenticated" | "anonymou
     setPending(false);
     if (result.error) { setMessage(result.error.message); return; }
   };
-  return <main className="stage"><section className="phone-app auth-phone"><div className="auth-screen">
+  return <main className="stage auth-stage"><aside className="auth-benefits" aria-label="Det här får du med Training Genie">
+    <small>DIN TRÄNING, SMARTARE</small>
+    <h2>Bygg vanor som faktiskt håller.</h2>
+    <p>Training Genie samlar planering, genomförande och utveckling i ett enkelt flöde.</p>
+    <div><span>01</span><section><strong>En plan som passar dig</strong><p>Träningen anpassas efter dina mål, din nivå och tiden du har.</p></section></div>
+    <div><span>02</span><section><strong>All träning på samma plats</strong><p>Logga styrkepass och löpning utan att tappa överblicken.</p></section></div>
+    <div><span>03</span><section><strong>Se att du går framåt</strong><p>Följ kontinuitet, resultat och progression vecka för vecka.</p></section></div>
+    <div><span>04</span><section><strong>En coach nära till hands</strong><p>Få konkreta AI-råd när passet eller dagsformen behöver justeras.</p></section></div>
+  </aside><section className="phone-app auth-phone"><div className="auth-screen">
     <Image className="auth-logo-image" src="/training-genie-logo.png" width={1254} height={1254} alt="Training Genie" priority />
     <span className="auth-orb">✦</span>
     <small>PERSONLIG TRÄNING · DRIVEN AV AI</small>
