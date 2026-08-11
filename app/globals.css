@@ -14,3 +14,49 @@
 .auth-form textarea{width:100%;min-height:64px;resize:vertical;border:1px solid #1e3049;border-radius:10px;background:#07111d;color:#fff;padding:10px 12px;font:inherit;font-size:10px;outline:none}.auth-form textarea:focus{border-color:#367fff;box-shadow:0 0 0 3px rgba(54,127,255,.12)}.auth-honeypot{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important}
 .auth-screen{padding:24px 34px}.auth-logo-image{width:165px;height:165px;object-fit:contain;margin-bottom:4px}.auth-screen .auth-orb{width:54px;height:54px;font-size:24px}
 .auth-logo-image{margin-bottom:14px}
+
+/* Responsive application shell: desktop workspace first, compact navigation on mobile. */
+.nav-brand,.nav-account{display:none}.nav-links{display:contents}
+
+@media(min-width:760px){
+  body{background:radial-gradient(circle at 55% -15%,#0a2d5d 0,#03101f 38%,#01060c 78%)}
+  .app-stage{display:block;padding:24px;min-height:100vh}
+  .app-shell{width:min(1440px,calc(100vw - 48px));height:calc(100vh - 48px);min-height:700px;margin:0 auto;border:1px solid #172b43;border-radius:22px;box-shadow:0 28px 90px rgba(0,0,0,.42),0 0 70px rgba(29,108,255,.08);background:linear-gradient(145deg,#06111e,#030a13);overflow:hidden}
+  .app-shell .app-header{display:none}
+  .app-shell .screen{inset:0 0 0 224px;overflow:auto;background:radial-gradient(circle at 72% 0,rgba(21,74,145,.14),transparent 35%)}
+  .app-shell .view{width:100%;max-width:1180px;margin:0 auto;padding:34px 42px 52px}
+  .app-shell .bottom-nav{inset:0 auto 0 0;width:224px;height:auto;display:flex;flex-direction:column;padding:24px 14px 18px;border:0;border-right:1px solid #15263a;background:linear-gradient(180deg,rgba(7,18,31,.98),rgba(3,10,18,.98));backdrop-filter:blur(24px)}
+  .app-shell .nav-brand{display:flex;align-items:center;gap:9px;padding:0 8px 24px;border-bottom:1px solid #15263a}
+  .app-shell .nav-brand img{width:48px;height:48px;object-fit:contain;border-radius:12px}
+  .app-shell .nav-brand>span{display:flex;flex-direction:column;font-size:13px;font-style:italic;line-height:.95;letter-spacing:-.3px;text-align:left}
+  .app-shell .nav-brand b{color:#4b91ff;font-size:16px}
+  .app-shell .nav-links{display:flex;flex:1;flex-direction:column;gap:6px;padding-top:25px}
+  .app-shell .bottom-nav .nav-links button{min-height:49px;flex-direction:row;justify-content:flex-start;gap:14px;padding:0 14px;border-radius:11px;color:#8493a8}
+  .app-shell .bottom-nav .nav-links button:hover{background:#0c1a2a;color:#dce8f7}
+  .app-shell .bottom-nav .nav-links button.active{background:linear-gradient(90deg,rgba(34,126,255,.2),rgba(71,59,255,.08));color:#6fa6ff;box-shadow:inset 3px 0 #3387ff}
+  .app-shell .bottom-nav .nav-links button span{width:22px;font-size:18px;text-align:center}
+  .app-shell .bottom-nav .nav-links button small{font-size:12px;font-weight:600}
+  .app-shell .nav-account{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;width:100%;padding:13px 8px 0;border:0;border-top:1px solid #15263a;background:none;text-align:left;color:#fff}
+  .app-shell .nav-account>span{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:linear-gradient(135deg,#208aff,#5938ff);font-size:11px;font-weight:800}
+  .app-shell .nav-account small{display:flex;min-width:0;flex-direction:column;gap:2px}
+  .app-shell .nav-account strong{overflow:hidden;text-overflow:ellipsis;font-size:11px;white-space:nowrap}
+  .app-shell .nav-account em{color:#718198;font-size:9px;font-style:normal}
+  .app-shell .ai-fab{position:fixed;right:max(42px,calc((100vw - min(1440px,calc(100vw - 48px)))/2 + 28px));bottom:42px;width:52px;height:52px}
+  .app-shell .page-top{height:42px;grid-template-columns:1fr 48px;text-align:left;margin-bottom:7px}
+  .app-shell .page-top button:first-child{display:none}.app-shell .page-top>span{display:none}.app-shell .page-top strong{font-size:22px}.app-shell .page-top button:last-child{grid-column:2;font-size:22px}
+  .app-shell .welcome{grid-column:1/-1;margin:0 0 8px}.app-shell .welcome p{font-size:30px;letter-spacing:-.8px}.app-shell .welcome small{font-size:14px}
+  .app-shell .home-view{display:grid;grid-template-columns:repeat(12,1fr);gap:16px 18px;align-content:start}
+  .app-shell .home-view>.page-top{grid-column:1/-1}.app-shell .stat-pair{grid-column:1/8;grid-row:3/5;gap:16px}.app-shell .glass-card{min-height:190px;padding:22px;border-radius:17px}.app-shell .glass-card label{font-size:11px}.app-shell .glass-card strong{font-size:32px}.app-shell .glass-card span{font-size:11px}.app-shell .bars{height:58px}
+  .app-shell .goal-card{grid-column:8/13;grid-row:3/5;margin:0;min-height:190px;padding:23px;grid-template-columns:120px 1fr}.app-shell .goal-ring{width:106px;height:106px}.app-shell .goal-ring strong{font-size:27px}.app-shell .goal-card h3{font-size:16px}.app-shell .goal-card p{font-size:12px;margin:7px 0}
+  .app-shell .ai-insight{grid-column:1/-1;grid-row:5;margin:0;padding:16px;grid-template-columns:46px 1fr 18px}.app-shell .ai-insight strong{font-size:14px}.app-shell .ai-insight small{font-size:11px}.app-shell .ai-insight label{font-size:8px}
+  .app-shell .home-view>.section-title:has(+.next-workout){grid-column:1/7;grid-row:6}.app-shell .next-workout{grid-column:1/7;grid-row:7;height:104px}.app-shell .next-workout strong{font-size:15px}.app-shell .next-workout small{font-size:11px}.app-shell .next-workout{grid-template-columns:1fr 150px}
+  .app-shell .home-view>.section-title:has(+.activity-card){grid-column:7/13;grid-row:6}.app-shell .activity-card{grid-column:7/13;grid-row:7;height:104px;grid-template-columns:58px 1fr 130px}.app-shell .activity-card strong{font-size:14px}.app-shell .activity-card small{font-size:11px}.app-shell .section-title{margin:8px 2px 0}.app-shell .section-title strong{font-size:14px}.app-shell .section-title button{font-size:11px}
+  .app-shell .workout-cover{height:300px}.app-shell .workout-meta{height:58px;font-size:12px}.app-shell .adapt-chip{font-size:12px;padding:13px}.app-shell .exercise-list{grid-template-columns:1fr 1fr;gap:10px}.app-shell .exercise-list>button{min-height:72px}.app-shell .exercise-list strong{font-size:13px}.app-shell .exercise-list small{font-size:11px}
+  .app-shell .metric-grid{grid-template-columns:repeat(4,1fr)}.app-shell .metric-grid>div{height:175px}.app-shell .metric-grid small{font-size:11px}.app-shell .metric-grid strong{font-size:29px}.app-shell .progress-card{padding:24px}.app-shell .progress-card h2{font-size:25px}.app-shell .progress-card p{font-size:11px}
+  .app-shell .plan-list{grid-template-columns:1fr 1fr}.app-shell .plan-list>div{min-height:84px}.app-shell .profile-list{max-width:760px;margin:auto;grid-template-columns:1fr 1fr}.app-shell .profile-list button{height:76px}
+  .app-shell .sheet-backdrop{left:224px;align-items:stretch;justify-content:flex-end}.app-shell .coach-sheet{width:min(480px,100%);height:100%;border-radius:22px 0 0 22px;padding:26px;box-shadow:-25px 0 70px #000}.app-shell .sheet-handle{display:none}
+}
+
+@media(max-width:759px){
+  .app-shell .nav-brand,.app-shell .nav-account{display:none}.app-shell .nav-links{display:contents}
+}

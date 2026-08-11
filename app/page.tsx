@@ -76,9 +76,10 @@ export default function Home() {
   if (authState !== "authenticated" || !session) return <AuthScreen state={authState} />;
 
   return (
-    <main className="stage">
-      <section className="phone-app">
-        <header className="statusbar"><span>9:41</span><span className="brand-mini">TG</span><span>● ◒ ▰</span></header>
+    <main className="stage app-stage">
+      <section className="phone-app app-shell">
+        <header className="statusbar app-header"><span>TräningsGenie</span><span className="brand-mini">TG</span><span>{session.name}</span></header>
+        <BottomNav view={view} setView={setView} session={session} />
         <div className="screen">
           {view === "hem" && <Dashboard coach={coach} loading={loading} onCoach={() => setCoachOpen(true)} onStart={() => { setSessionOpen(true); setView("pass"); }} />}
           {view === "pass" && <Workout open={sessionOpen} onStart={() => setSessionOpen(true)} onAdapt={() => { setCoachOpen(true); void askAI("adapt"); }} />}
@@ -86,7 +87,6 @@ export default function Home() {
           {view === "planer" && <Planner plan={plan} loading={loading} onGenerate={() => void askAI("plan")} />}
           {view === "profil" && <Profile session={session} accessToken={accessToken ?? ""} />}
         </div>
-        <BottomNav view={view} setView={setView} />
         <button className="ai-fab" onClick={() => setCoachOpen(true)} aria-label="Öppna AI-coachen"><span>✦</span></button>
         {coachOpen && <CoachSheet coach={coach} loading={loading} onClose={() => setCoachOpen(false)} onAsk={(text) => void askAI("chat", text)} />}
       </section>
@@ -193,7 +193,8 @@ function CoachSheet({ coach, loading, onClose, onAsk }: { coach: CoachReply; loa
 
 function SectionTitle({title,action}:{title:string;action:string}) { return <div className="section-title"><strong>{title}</strong><button>{action}</button></div>; }
 
-function BottomNav({view,setView}:{view:View;setView:(v:View)=>void}) {
+function BottomNav({view,setView,session}:{view:View;setView:(v:View)=>void;session:AccountSession}) {
   const items:[[View,string,string],[View,string,string],[View,string,string],[View,string,string],[View,string,string]]=[["hem","◆","Hem"],["pass","♧","Pass"],["statistik","▥","Statistik"],["planer","▣","Planer"],["profil","♙","Profil"]];
-  return <nav className="bottom-nav">{items.map(([v,icon,label])=><button className={view===v?"active":""} onClick={()=>setView(v)} key={v}><span>{icon}</span><small>{label}</small></button>)}</nav>;
+  const initials = session.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase();
+  return <nav className="bottom-nav"><div className="nav-brand"><Image src="/training-genie-logo.png" width={52} height={52} alt="" /><span><strong>TRAINING</strong><b>GENIE</b></span></div><div className="nav-links">{items.map(([v,icon,label])=><button className={view===v?"active":""} onClick={()=>setView(v)} key={v}><span>{icon}</span><small>{label}</small></button>)}</div><button className="nav-account" onClick={()=>setView("profil")}><span>{initials}</span><small><strong>{session.name}</strong><em>{session.role === "admin" ? "Administratör" : "Medlem"}</em></small></button></nav>;
 }
