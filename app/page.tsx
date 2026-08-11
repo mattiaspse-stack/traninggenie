@@ -42,8 +42,7 @@ export default function Home() {
     <main className="app-shell">
       <aside className="sidebar">
         <button className="brand" onClick={() => setView("hem")} aria-label="TräningsGenie hem">
-          <span className="brand-mark">TG</span>
-          <span>tränings<span>genie</span></span>
+          <img src="/traningsgenie-brand-v2.png" alt="TräningsGenie" />
         </button>
 
         <nav className="side-nav" aria-label="Huvudmeny">
@@ -66,7 +65,9 @@ export default function Home() {
 
       <section className="content">
         <header className="topbar">
-          <button className="mobile-brand" onClick={() => setView("hem")}><span className="brand-mark">TG</span></button>
+          <button className="mobile-brand" onClick={() => setView("hem")} aria-label="TräningsGenie hem">
+            <span className="brand-mark">TG</span><span className="mobile-wordmark">TRÄNINGS<span>GENIE</span></span>
+          </button>
           <div className="date-label">Tisdag 11 augusti</div>
           <button className="avatar avatar-mobile" aria-label="Öppna profil">MP</button>
         </header>
