@@ -9,6 +9,8 @@ type AccountRow = {
   role: "admin" | "user";
 };
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "info@mattiasp.se").trim().toLowerCase();
+
 export async function GET() {
   const identity = await getChatGPTUser();
   if (!identity) {
@@ -16,16 +18,16 @@ export async function GET() {
   }
 
   const db = getD1();
+  const role = identity.email.trim().toLowerCase() === ADMIN_EMAIL ? "admin" : "user";
   await db.prepare(`
     INSERT INTO app_users (id, email, full_name, role, created_at, updated_at)
-    VALUES (?, ?, ?,
-      CASE WHEN EXISTS (SELECT 1 FROM app_users WHERE role = 'admin') THEN 'user' ELSE 'admin' END,
-      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO UPDATE SET
       email = excluded.email,
       full_name = COALESCE(excluded.full_name, app_users.full_name),
+      role = excluded.role,
       updated_at = CURRENT_TIMESTAMP
-  `).bind(identity.id, identity.email, identity.fullName).run();
+  `).bind(identity.id, identity.email, identity.fullName, role).run();
 
   const account = await db.prepare(
     "SELECT id, email, full_name, role FROM app_users WHERE id = ? LIMIT 1",

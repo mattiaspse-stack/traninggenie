@@ -11,7 +11,7 @@ npm run dev
 
 ## Inloggning och databas
 
-Appen använder Sign in with ChatGPT och en beständig D1-databas. Konton skapas automatiskt vid första säkra inloggningen. Den första registrerade användaren blir administratör; senare konton får vanlig användarroll.
+Appen använder Sign in with ChatGPT och en beständig D1-databas. Konton skapas automatiskt vid första säkra inloggningen. Kontot som matchar `ADMIN_EMAIL` får administratörsrollen; övriga konton får vanlig användarroll.
 
 Databasen lagrar användarprofiler, roller, träningspass, set och träningsplaner. Schemat finns i `db/schema.ts` och den genererade migreringen i `drizzle/`.
 

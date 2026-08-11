@@ -21,3 +21,9 @@ test("database migration creates accounts and training data", async () => {
   assert.match(migration, /CREATE TABLE `exercise_sets`/);
   assert.match(migration, /CREATE TABLE `training_plans`/);
 });
+
+test("admin account is explicitly configured", async () => {
+  const sessionRoute = await readFile(new URL("../app/api/session/route.ts", import.meta.url), "utf8");
+  assert.match(sessionRoute, /info@mattiasp\.se/);
+  assert.doesNotMatch(sessionRoute, /EXISTS \(SELECT 1 FROM app_users WHERE role = 'admin'\)/);
+});
