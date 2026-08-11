@@ -5,9 +5,12 @@ import Image from "next/image";
 import { getSupabaseBrowserClient } from "./supabase";
 
 type View = "hem" | "pass" | "statistik" | "planer" | "profil";
-type AccountSession = { id: string; email: string; name: string; role: "admin" | "user" };
+type AccountSession = { id: string; email: string; name: string; role: "admin" | "user"; onboardingComplete: boolean };
 type CoachReply = { title?: string; summary: string; reason?: string; plan?: PlanDay[]; source?: string };
 type PlanDay = { day: string; title: string; meta: string; type: "strength" | "run" | "recovery" };
+type TrainingLevel = "beginner" | "intermediate" | "advanced" | "none";
+type OnboardingAnswers = { modalities: ("run" | "strength")[]; goals: string[]; runningLevel: TrainingLevel; strengthLevel: TrainingLevel; currentTraining: string; daysPerWeek: number; minutesPerSession: number; equipment: string[]; limitations: string; preferredDays: string[] };
+type PlanProposal = { overview: string; rationale: string; plan: (PlanDay & { focus: string })[]; source?: string };
 
 const defaultPlan: PlanDay[] = [
   { day: "Mån 20", title: "Styrka – Överkropp", meta: "18:00 · 60 min", type: "strength" },
@@ -74,6 +77,7 @@ export default function Home() {
   }, [authState, accessToken]);
 
   if (authState !== "authenticated" || !session) return <AuthScreen state={authState} />;
+  if (!session.onboardingComplete) return <Onboarding accessToken={accessToken ?? ""} name={session.name} onComplete={(proposal) => { setPlan(proposal.plan); setSession({ ...session, onboardingComplete: true }); }} />;
 
   return (
     <main className="stage app-stage">
@@ -134,6 +138,56 @@ function AuthScreen({ state }: { state: "checking" | "authenticated" | "anonymou
     {state === "error" && <button className="gradient-button auth-button" onClick={() => location.reload()}>Försök igen</button>}
     <em>Din träningsdata är privat och kopplad till ditt konto.</em>
   </div></section></main>;
+}
+
+function Onboarding({ accessToken, name, onComplete }: { accessToken: string; name: string; onComplete: (proposal: PlanProposal) => void }) {
+  const [answers, setAnswers] = useState<OnboardingAnswers>({ modalities: [], goals: [], runningLevel: "none", strengthLevel: "none", currentTraining: "", daysPerWeek: 4, minutesPerSession: 45, equipment: [], limitations: "", preferredDays: [] });
+  const [step, setStep] = useState(0);
+  const [proposal, setProposal] = useState<PlanProposal | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const firstName = name.split(/\s+/)[0] || "där";
+  const steps = ["modalities", "goals", ...(answers.modalities.includes("run") ? ["running"] : []), ...(answers.modalities.includes("strength") ? ["strength"] : []), "history", "availability", ...(answers.modalities.includes("strength") ? ["equipment"] : []), "limitations", "days"];
+  const current = steps[step];
+  const toggle = <T extends string>(list: T[], value: T) => list.includes(value) ? list.filter(item => item !== value) : [...list, value];
+  const levelLabel: Record<TrainingLevel, string> = { beginner: "Nybörjare", intermediate: "Van", advanced: "Erfaren", none: "Inte valt" };
+  const canContinue = current === "modalities" ? answers.modalities.length > 0 : current === "goals" ? answers.goals.length > 0 : current === "running" ? answers.runningLevel !== "none" : current === "strength" ? answers.strengthLevel !== "none" : current === "history" ? answers.currentTraining.trim().length >= 3 : current === "equipment" ? answers.equipment.length > 0 : current === "days" ? answers.preferredDays.length >= answers.daysPerWeek : true;
+  const generate = async () => {
+    setPending(true); setError("");
+    try {
+      const response = await fetch("/api/onboarding", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ action: "generate", answers }) });
+      const data = await response.json() as PlanProposal & { error?: string };
+      if (!response.ok) throw new Error(data.error || "Planen kunde inte skapas.");
+      setProposal(data);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Något gick fel."); }
+    finally { setPending(false); }
+  };
+  const finish = async () => {
+    if (!proposal) return;
+    setPending(true); setError("");
+    try {
+      const response = await fetch("/api/onboarding", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ action: "complete", answers, proposal }) });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Planen kunde inte sparas.");
+      onComplete(proposal);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Något gick fel."); }
+    finally { setPending(false); }
+  };
+  const next = () => { if (step === steps.length - 1) void generate(); else setStep(value => value + 1); };
+  const Choice = ({ active, title, detail, onClick }: { active: boolean; title: string; detail?: string; onClick: () => void }) => <button type="button" className={`onboarding-choice ${active ? "active" : ""}`} onClick={onClick}><i>{active ? "✓" : ""}</i><span><strong>{title}</strong>{detail && <small>{detail}</small>}</span></button>;
+  const heading: Record<string, [string, string]> = {
+    modalities: [`Vad vill du träna, ${firstName}?`, "Välj en eller kombinera. Jag bedömer varje gren separat."], goals: ["Vad vill du uppnå?", "Du kan välja flera mål. Planen prioriterar dem tillsammans."], running: ["Hur erfaren är du inom löpning?", "Tänk på din nuvarande löpning, inte din allmänna kondition."], strength: ["Hur erfaren är du inom styrketräning?", "Det är helt normalt att ha en annan nivå här än i löpning."], history: ["Hur tränar du idag?", "Berätta kort om veckomängd, distanser, tempo, övningar eller vikter."], availability: ["Hur mycket tid har du?", "Jag bygger en plan som faktiskt ryms i din vecka."], equipment: ["Vilken utrustning har du?", "Jag väljer bara övningar du har möjlighet att genomföra."], limitations: ["Något jag behöver ta hänsyn till?", "Skriv skador, besvär eller övningar du vill undvika. Lämna tomt om inget finns."], days: ["Vilka dagar passar bäst?", `Välj minst ${answers.daysPerWeek} dagar så fördelar jag belastningen smart.`],
+  };
+  return <main className="onboarding-stage"><section className="onboarding-shell"><aside className="onboarding-aside"><div className="onboarding-brand"><Image src="/training-genie-logo.png" width={74} height={74} alt="Training Genie" /><span><strong>TRAINING</strong><b>GENIE</b></span></div><div><small>DIN PERSONLIGA START</small><h1>En plan byggd runt dig.</h1><p>Löpning och styrka bedöms var för sig. Din plan blir lika avancerad eller grundläggande som du behöver inom varje del.</p></div><ul><li className="active">Mål och träningsform</li><li className={step >= 2 ? "active" : ""}>Nivå och erfarenhet</li><li className={step >= Math.max(4, steps.length - 4) ? "active" : ""}>Tid och förutsättningar</li><li className={proposal ? "active" : ""}>Din första plan</li></ul></aside><section className="onboarding-main">{proposal ? <div className="plan-review"><div className="ai-message"><span>✦</span><div><small>TRÄNINGSGENIE AI</small><h2>Din startplan är klar.</h2><p>{proposal.overview}</p><em>{proposal.rationale}</em></div></div><div className="proposal-grid">{proposal.plan.map(item => <article key={`${item.day}-${item.title}`}><span className={item.type}>{item.type === "run" ? "LÖP" : item.type === "strength" ? "STYRKA" : "VILA"}</span><small>{item.day}</small><h3>{item.title}</h3><p>{item.meta}</p><em>{item.focus}</em></article>)}</div>{error && <p className="onboarding-error">{error}</p>}<div className="onboarding-actions"><button className="secondary-button" disabled={pending} onClick={() => setProposal(null)}>Justera svar</button><button className="gradient-button" disabled={pending} onClick={() => void finish()}>{pending ? "Sparar planen…" : "Godkänn och starta"}</button></div></div> : <><div className="onboarding-progress"><span style={{ width: `${((step + 1) / steps.length) * 100}%` }} /></div><div className="ai-question"><span>✦</span><div><small>FRÅGA {step + 1} AV {steps.length}</small><h2>{heading[current][0]}</h2><p>{heading[current][1]}</p></div></div><div className="onboarding-answer">
+    {current === "modalities" && <div className="choice-grid"><Choice active={answers.modalities.includes("run")} title="Löpning" detail="Distans, tempo och uthållighet" onClick={() => setAnswers(a => ({ ...a, modalities: toggle(a.modalities, "run"), runningLevel: a.modalities.includes("run") ? "none" : a.runningLevel }))} /><Choice active={answers.modalities.includes("strength")} title="Styrketräning" detail="Teknik, styrka och progression" onClick={() => setAnswers(a => ({ ...a, modalities: toggle(a.modalities, "strength"), strengthLevel: a.modalities.includes("strength") ? "none" : a.strengthLevel }))} /></div>}
+    {current === "goals" && <div className="choice-grid">{["Bli starkare", "Springa snabbare", "Orka längre", "Bygga muskler", "Må bättre", "Skapa en hållbar vana"].map(value => <Choice key={value} active={answers.goals.includes(value)} title={value} onClick={() => setAnswers(a => ({ ...a, goals: toggle(a.goals, value) }))} />)}</div>}
+    {(current === "running" || current === "strength") && <div className="level-grid">{(["beginner", "intermediate", "advanced"] as TrainingLevel[]).map(level => <Choice key={level} active={(current === "running" ? answers.runningLevel : answers.strengthLevel) === level} title={levelLabel[level]} detail={level === "beginner" ? "Ny eller oregelbunden" : level === "intermediate" ? "Tränar regelbundet" : "Flera års strukturerad träning"} onClick={() => setAnswers(a => ({ ...a, [current === "running" ? "runningLevel" : "strengthLevel"]: level }))} />)}</div>}
+    {current === "history" && <textarea className="onboarding-textarea" autoFocus value={answers.currentTraining} onChange={event => setAnswers(a => ({ ...a, currentTraining: event.target.value }))} placeholder="Exempel: Jag springer 30–40 km per vecka och har sprungit milen på 45 minuter. Jag har nästan ingen erfarenhet av gymträning." />}
+    {current === "availability" && <div className="availability-grid"><label><span>Pass per vecka</span><strong>{answers.daysPerWeek}</strong><input type="range" min="1" max="7" value={answers.daysPerWeek} onChange={event => setAnswers(a => ({ ...a, daysPerWeek: Number(event.target.value), preferredDays: a.preferredDays.slice(0, Number(event.target.value)) }))} /></label><label><span>Minuter per pass</span><strong>{answers.minutesPerSession}</strong><input type="range" min="20" max="120" step="5" value={answers.minutesPerSession} onChange={event => setAnswers(a => ({ ...a, minutesPerSession: Number(event.target.value) }))} /></label></div>}
+    {current === "equipment" && <div className="choice-grid">{["Fullständigt gym", "Hantlar", "Skivstång", "Maskiner", "Gummiband", "Kroppsvikt hemma"].map(value => <Choice key={value} active={answers.equipment.includes(value)} title={value} onClick={() => setAnswers(a => ({ ...a, equipment: toggle(a.equipment, value) }))} />)}</div>}
+    {current === "limitations" && <textarea className="onboarding-textarea" autoFocus value={answers.limitations} onChange={event => setAnswers(a => ({ ...a, limitations: event.target.value }))} placeholder="Inga kända begränsningar" />}
+    {current === "days" && <div className="day-grid">{["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"].map(value => <Choice key={value} active={answers.preferredDays.includes(value)} title={value} onClick={() => setAnswers(a => ({ ...a, preferredDays: toggle(a.preferredDays, value) }))} />)}</div>}
+  </div>{error && <p className="onboarding-error">{error}</p>}<div className="onboarding-actions"><button className="secondary-button" disabled={step === 0 || pending} onClick={() => setStep(value => value - 1)}>Tillbaka</button><button className="gradient-button" disabled={!canContinue || pending} onClick={next}>{pending ? "AI bygger din plan…" : step === steps.length - 1 ? "Skapa min plan" : "Fortsätt"}</button></div></>}</section></section></main>;
 }
 
 function PageTop({ title, back }: { title?: string; back?: boolean }) {

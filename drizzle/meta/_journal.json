@@ -15,6 +15,13 @@
       "when": 1786438385352,
       "tag": "0001_illegal_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786446434945,
+      "tag": "0002_mean_patriot",
+      "breakpoints": true
     }
   ]
 }

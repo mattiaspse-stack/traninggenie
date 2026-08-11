@@ -34,6 +34,9 @@ export async function GET(request: Request) {
   const account = await db.prepare(
     "SELECT id, email, full_name, role FROM app_users WHERE id = ? LIMIT 1",
   ).bind(identity.id).first<AccountRow>();
+  const trainingProfile = await db.prepare(
+    "SELECT onboarding_complete FROM training_profiles WHERE user_id = ? LIMIT 1",
+  ).bind(identity.id).first<{ onboarding_complete: number }>();
 
   return NextResponse.json({
     authenticated: true,
@@ -42,6 +45,7 @@ export async function GET(request: Request) {
       email: account?.email ?? email,
       name: account?.full_name ?? fullName ?? email,
       role: account?.role ?? "user",
+      onboardingComplete: Boolean(trainingProfile?.onboarding_complete),
     },
   });
 }
