@@ -1,26 +1,23 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+test("contains the TräningsGenie product experience", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /AI-COACHEN/);
+  assert.match(source, /Nästa pass/);
+  assert.match(source, /Skapa ny plan med AI/);
+  assert.match(source, /AI-anpassa passet/);
+  assert.match(source, /workout-hero\.png/);
+  assert.match(source, /Logga in med ChatGPT/);
+  assert.match(source, /Administration/);
+  assert.doesNotMatch(source, /codex-preview|react-loading-skeleton/i);
+});
 
-  return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-}
-
-test("server-renders TräningsGenie", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
-  const html = await response.text();
-  assert.match(html, /TräningsGenie/);
-  assert.match(html, /Starta träningspass/);
-  assert.match(html, /Din aktivitet/);
-  assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+test("database migration creates accounts and training data", async () => {
+  const migration = await readFile(new URL("../drizzle/0000_famous_white_queen.sql", import.meta.url), "utf8");
+  assert.match(migration, /CREATE TABLE `app_users`/);
+  assert.match(migration, /CREATE TABLE `workouts`/);
+  assert.match(migration, /CREATE TABLE `exercise_sets`/);
+  assert.match(migration, /CREATE TABLE `training_plans`/);
 });

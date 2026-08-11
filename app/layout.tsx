@@ -12,17 +12,17 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = `${protocol}://${host}/og.png`;
 
   return {
-    title: "TräningsGenie – Din träning, din utveckling",
-    description: "Logga styrka och löpning. Följ din utveckling och bygg vanor som håller.",
+    title: "TräningsGenie – Din AI-coach",
+    description: "AI-driven träningsplanering för styrka, löpning och bättre progression.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
     openGraph: {
       title: "TräningsGenie",
-      description: "Din träning. Din utveckling.",
+      description: "Din AI-coach. Din träning. Ditt bästa jag.",
       locale: "sv_SE",
       type: "website",
-      images: [{ url: imageUrl, width: 1200, height: 630, alt: "TräningsGenie – din träning, din utveckling" }],
+      images: [{ url: imageUrl, width: 1731, height: 909, alt: "TräningsGenie – din AI-coach" }],
     },
-    twitter: { card: "summary_large_image", title: "TräningsGenie", description: "Din träning. Din utveckling.", images: [imageUrl] },
+    twitter: { card: "summary_large_image", title: "TräningsGenie", description: "Din AI-coach. Din träning. Ditt bästa jag.", images: [imageUrl] },
   };
 }
 

@@ -1,218 +1,160 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
 
-type View = "hem" | "pass" | "utveckling";
+type View = "hem" | "pass" | "statistik" | "planer" | "profil";
+type AccountSession = { id: string; email: string; name: string; role: "admin" | "user" };
+type CoachReply = { title?: string; summary: string; reason?: string; plan?: PlanDay[]; source?: string };
+type PlanDay = { day: string; title: string; meta: string; type: "strength" | "run" | "recovery" };
 
-const week = [
-  { day: "M", date: "10", done: true },
-  { day: "T", date: "11", current: true },
-  { day: "O", date: "12" },
-  { day: "T", date: "13" },
-  { day: "F", date: "14" },
-  { day: "L", date: "15" },
-  { day: "S", date: "16" },
+const defaultPlan: PlanDay[] = [
+  { day: "Mån 20", title: "Styrka – Överkropp", meta: "18:00 · 60 min", type: "strength" },
+  { day: "Ons 22", title: "Löpning – Intervaller", meta: "19:30 · 40 min", type: "run" },
+  { day: "Fre 24", title: "Rörlighet & Core", meta: "17:30 · 25 min", type: "recovery" },
 ];
 
-const activity = [
-  { type: "Styrka", title: "Överkropp A", meta: "46 min · 12 set", value: "+8%", date: "Igår", tone: "lime" },
-  { type: "Löpning", title: "Lugn distans", meta: "6,4 km · 35:12", value: "5:30 /km", date: "8 aug", tone: "blue" },
-  { type: "Styrka", title: "Underkropp A", meta: "52 min · 15 set", value: "3 rekord", date: "6 aug", tone: "orange" },
+const exercises = [
+  ["Bänkpress", "4 × 8–10"], ["Lutande hantelpress", "3 × 8–10"],
+  ["Sittande rodd", "3 × 10–12"], ["Axelpress", "3 × 8–10"], ["Dips", "3 × 10–12"],
 ];
 
 export default function Home() {
+  const [session, setSession] = useState<AccountSession | null>(null);
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "anonymous" | "error">("checking");
   const [view, setView] = useState<View>("hem");
+  const [plan, setPlan] = useState(defaultPlan);
+  const [coach, setCoach] = useState<CoachReply>({ summary: "Jag analyserar din återhämtning, historik och veckomål…" });
+  const [coachOpen, setCoachOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [sets, setSets] = useState([
-    { kg: 72.5, reps: 8, done: true },
-    { kg: 72.5, reps: 8, done: true },
-    { kg: 72.5, reps: 8, done: false },
-  ]);
-  const [finished, setFinished] = useState(false);
 
-  const completedSets = useMemo(() => sets.filter((set) => set.done).length, [sets]);
-
-  const startSession = () => {
-    setFinished(false);
-    setSessionOpen(true);
-    setView("pass");
+  const askAI = async (mode: "daily" | "plan" | "adapt" | "chat", message = "") => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, message, profile: { goal: "Bygga styrka och springa 10 km", level: "Van", days: 4 }, context: { sleep: 7.4, readiness: 82, recent: "Överkropp i går, löpning för tre dagar sedan" } }) });
+      const data = await response.json() as CoachReply;
+      setCoach(data);
+      if (data.plan) setPlan(data.plan);
+    } catch {
+      setCoach({ summary: "Jag kunde inte nå AI-coachen just nu. Försök igen om en stund.", source: "error" });
+    } finally { setLoading(false); }
   };
 
+  useEffect(() => {
+    void fetch("/api/session", { cache: "no-store" })
+      .then(async (response) => {
+        if (response.status === 401) { setAuthState("anonymous"); return; }
+        if (!response.ok) throw new Error("session");
+        const data = await response.json() as { user: AccountSession };
+        setSession(data.user);
+        setAuthState("authenticated");
+      })
+      .catch(() => setAuthState("error"));
+  }, []);
+
+  useEffect(() => {
+    if (authState !== "authenticated") return;
+    const controller = new AbortController();
+    fetch("/api/coach", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "daily", profile: { goal: "Bygga styrka och springa 10 km", level: "Van", days: 4 }, context: { sleep: 7.4, readiness: 82, recent: "Överkropp i går, löpning för tre dagar sedan" } }), signal: controller.signal })
+      .then(response => response.json())
+      .then((data: CoachReply) => setCoach(data))
+      .catch(error => { if (error instanceof Error && error.name !== "AbortError") setCoach({ summary: "Jag kunde inte nå AI-coachen just nu.", source: "error" }); })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [authState]);
+
+  if (authState !== "authenticated" || !session) return <AuthScreen state={authState} />;
+
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <button className="brand" onClick={() => setView("hem")} aria-label="TräningsGenie hem">
-          <img src="/traningsgenie-brand-v2.png" alt="TräningsGenie" />
-        </button>
-
-        <nav className="side-nav" aria-label="Huvudmeny">
-          <NavButton active={view === "hem"} label="Översikt" symbol="⌂" onClick={() => setView("hem")} />
-          <NavButton active={view === "pass"} label="Träningspass" symbol="＋" onClick={() => setView("pass")} />
-          <NavButton active={view === "utveckling"} label="Utveckling" symbol="↗" onClick={() => setView("utveckling")} />
-        </nav>
-
-        <div className="sidebar-goal">
-          <div className="goal-ring"><span>3</span><small>/ 4</small></div>
-          <div><strong>Veckans mål</strong><p>Ett pass kvar. Du har det.</p></div>
+    <main className="stage">
+      <section className="phone-app">
+        <header className="statusbar"><span>9:41</span><span className="brand-mini">TG</span><span>● ◒ ▰</span></header>
+        <div className="screen">
+          {view === "hem" && <Dashboard coach={coach} loading={loading} onCoach={() => setCoachOpen(true)} onStart={() => { setSessionOpen(true); setView("pass"); }} />}
+          {view === "pass" && <Workout open={sessionOpen} onStart={() => setSessionOpen(true)} onAdapt={() => { setCoachOpen(true); void askAI("adapt"); }} />}
+          {view === "statistik" && <Statistics />}
+          {view === "planer" && <Planner plan={plan} loading={loading} onGenerate={() => void askAI("plan")} />}
+          {view === "profil" && <Profile session={session} />}
         </div>
-
-        <button className="profile-button">
-          <span className="avatar">MP</span>
-          <span><strong>Mattias</strong><small>Min profil</small></span>
-          <span className="more">•••</span>
-        </button>
-      </aside>
-
-      <section className="content">
-        <header className="topbar">
-          <button className="mobile-brand" onClick={() => setView("hem")} aria-label="TräningsGenie hem">
-            <span className="brand-mark">TG</span><span className="mobile-wordmark">TRÄNINGS<span>GENIE</span></span>
-          </button>
-          <div className="date-label">Tisdag 11 augusti</div>
-          <button className="avatar avatar-mobile" aria-label="Öppna profil">MP</button>
-        </header>
-
-        {view === "hem" && <Dashboard onStart={startSession} />}
-        {view === "pass" && (
-          <WorkoutView
-            open={sessionOpen}
-            finished={finished}
-            sets={sets}
-            completedSets={completedSets}
-            onStart={startSession}
-            onToggle={(index) => setSets(sets.map((set, i) => i === index ? { ...set, done: !set.done } : set))}
-            onAdd={() => setSets([...sets, { kg: 72.5, reps: 8, done: false }])}
-            onFinish={() => setFinished(true)}
-          />
-        )}
-        {view === "utveckling" && <ProgressView />}
+        <BottomNav view={view} setView={setView} />
+        <button className="ai-fab" onClick={() => setCoachOpen(true)} aria-label="Öppna AI-coachen"><span>✦</span></button>
+        {coachOpen && <CoachSheet coach={coach} loading={loading} onClose={() => setCoachOpen(false)} onAsk={(text) => void askAI("chat", text)} />}
       </section>
-
-      <nav className="bottom-nav" aria-label="Mobilmeny">
-        <NavButton active={view === "hem"} label="Översikt" symbol="⌂" onClick={() => setView("hem")} />
-        <NavButton active={view === "pass"} label="Pass" symbol="＋" onClick={() => setView("pass")} />
-        <NavButton active={view === "utveckling"} label="Utveckling" symbol="↗" onClick={() => setView("utveckling")} />
-      </nav>
     </main>
   );
 }
 
-function NavButton({ active, label, symbol, onClick }: { active: boolean; label: string; symbol: string; onClick: () => void }) {
-  return <button className={active ? "active" : ""} onClick={onClick}><span className="nav-symbol">{symbol}</span><span>{label}</span></button>;
+function AuthScreen({ state }: { state: "checking" | "authenticated" | "anonymous" | "error" }) {
+  const checking = state === "checking";
+  return <main className="stage"><section className="phone-app auth-phone"><div className="auth-screen">
+    <Image src="/traningsgenie-brand-v2.png" width={300} height={120} alt="TräningsGenie" priority />
+    <span className="auth-orb">✦</span>
+    <small>PERSONLIG TRÄNING · DRIVEN AV AI</small>
+    <h1>{checking ? "Förbereder din profil…" : state === "error" ? "Databasen behöver aktiveras" : "Din träning börjar här."}</h1>
+    <p>{checking ? "Vi kontrollerar din säkra inloggning." : state === "error" ? "Försök igen när databasen är publicerad och redo." : "Logga in för att spara pass, följa utvecklingen och få en plan som lär känna dig."}</p>
+    {!checking && state !== "error" && <a className="gradient-button auth-button" href="/signin-with-chatgpt?return_to=%2F">Logga in med ChatGPT</a>}
+    {state === "error" && <button className="gradient-button auth-button" onClick={() => location.reload()}>Försök igen</button>}
+    <em>Din träningsdata är privat och kopplad till ditt konto.</em>
+  </div></section></main>;
 }
 
-function Dashboard({ onStart }: { onStart: () => void }) {
-  return (
-    <div className="page dashboard-page">
-      <section className="hero-grid">
-        <div className="hero-copy">
-          <span className="eyebrow">DIN TRÄNING · DIN UTVECKLING</span>
-          <h1>God morgon,<br /><em>Mattias.</em></h1>
-          <p>Du är inne på din tredje aktiva vecka. Fortsätt bygga – ett pass i taget.</p>
-          <button className="primary-button" onClick={onStart}><span>＋</span> Starta träningspass</button>
-        </div>
-
-        <div className="today-card">
-          <div className="today-header"><span>IDAG</span><span className="status-dot">Planerat</span></div>
-          <div className="workout-icon"><span></span><span></span><span></span></div>
-          <h2>Överkropp B</h2>
-          <p>6 övningar · cirka 50 min</p>
-          <div className="exercise-preview">
-            <div><span>01</span><strong>Bänkpress</strong><small>3 × 8</small></div>
-            <div><span>02</span><strong>Sittande rodd</strong><small>3 × 10</small></div>
-            <div><span>03</span><strong>Axelpress</strong><small>3 × 8</small></div>
-          </div>
-          <button className="card-action" onClick={onStart}>Öppna passet <span>→</span></button>
-        </div>
-      </section>
-
-      <section className="week-strip">
-        <div><span className="section-kicker">DEN HÄR VECKAN</span><strong>3 av 4 pass klara</strong></div>
-        <div className="days">
-          {week.map((item, index) => (
-            <div className={`day ${item.done ? "done" : ""} ${item.current ? "current" : ""}`} key={index}>
-              <span>{item.day}</span><strong>{item.done ? "✓" : item.date}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="stats-grid">
-        <Metric label="PASS I AUGUSTI" value="7" detail="↑ 2 från juli" accent="lime" />
-        <Metric label="TRÄNINGSTID" value="5h 42m" detail="Den här månaden" accent="cream" />
-        <Metric label="TOTAL DISTANS" value="24,8 km" detail="↑ 12% mot juli" accent="blue" />
-        <Metric label="AKTIV SVIT" value="3 veckor" detail="Personligt rekord: 6" accent="orange" />
-      </section>
-
-      <section className="lower-grid">
-        <div className="panel activity-panel">
-          <div className="panel-heading"><div><span className="section-kicker">SENASTE</span><h2>Din aktivitet</h2></div><button>Visa alla →</button></div>
-          <div className="activity-list">
-            {activity.map((item) => (
-              <button className="activity-row" key={item.title}>
-                <span className={`activity-icon ${item.tone}`}>{item.type === "Löpning" ? "RUN" : "GYM"}</span>
-                <span className="activity-main"><small>{item.type} · {item.date}</small><strong>{item.title}</strong><span>{item.meta}</span></span>
-                <span className="activity-value">{item.value}<small>›</small></span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel progress-panel">
-          <div className="panel-heading"><div><span className="section-kicker">PROGRESSION</span><h2>Bänkpress</h2></div><button>12 veckor⌄</button></div>
-          <div className="chart-summary"><strong>82,5 <small>kg</small></strong><span>+7,5 kg</span></div>
-          <div className="mini-chart" aria-label="Bänkpressutveckling från 75 till 82,5 kilogram">
-            {[18, 24, 30, 34, 42, 40, 52, 60, 66, 73, 79, 88].map((height, index) => <i key={index} style={{ height: `${height}%` }} className={index === 11 ? "last" : ""}></i>)}
-          </div>
-          <div className="chart-axis"><span>20 maj</span><span>17 juni</span><span>11 aug</span></div>
-        </div>
-      </section>
-    </div>
-  );
+function PageTop({ title, back }: { title?: string; back?: boolean }) {
+  return <div className="page-top"><button aria-label="Meny">{back ? "‹" : "☰"}</button>{title ? <strong>{title}</strong> : <span></span>}<button aria-label="Notiser">♢<i></i></button></div>;
 }
 
-function Metric({ label, value, detail, accent }: { label: string; value: string; detail: string; accent: string }) {
-  return <div className={`metric ${accent}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
+function Dashboard({ coach, loading, onCoach, onStart }: { coach: CoachReply; loading: boolean; onCoach: () => void; onStart: () => void }) {
+  return <div className="view home-view">
+    <PageTop />
+    <section className="welcome"><p>Hej Mattias! <span>👋</span></p><small>Dags att bli starkare än igår.</small></section>
+    <section className="stat-pair">
+      <div className="glass-card"><label>Veckostatistik</label><strong>4 <small>/ 6</small></strong><span>Träningspass</span><div className="bars">{[38,62,34,70,48,83,67].map((h,i)=><i key={i} style={{height:h}} />)}</div></div>
+      <div className="glass-card"><label>Dagens statistik</label><strong>🔥 510</strong><span>Kcal förbränt</span><div className="spark">⌁⌁⌁⌁</div></div>
+    </section>
+    <button className="ai-insight" onClick={onCoach}><span className="ai-orb">✦</span><span><label>AI-COACHEN · IDAG</label><strong>{loading ? "Analyserar din dag…" : coach.title ?? "Din smarta rekommendation"}</strong><small>{coach.summary}</small></span><b>›</b></button>
+    <section className="goal-card"><div className="goal-ring"><strong>75%</strong></div><div><h3>Dagens mål</h3><p><i>✓</i> Träna 45 min</p><p><i>✓</i> 10 000 steg</p><p><i>✓</i> Ät hälsosamt</p><p><i className="empty">○</i> Drick 2L vatten</p></div></section>
+    <SectionTitle title="Nästa pass" action="Visa alla" />
+    <button className="next-workout" onClick={onStart}><span><strong>Styrka – Överkropp 💪</strong><small>Idag 18:00 · 60 min</small></span><Image src="/workout-hero.png" width={160} height={100} alt="Överkroppspass" /></button>
+    <SectionTitle title="Aktiviteter" action="Visa alla" />
+    <div className="activity-card"><span className="run-icon">♙</span><span><strong>Löpning</strong><small>5,2 km · 28:15 · 5:25 min/km</small></span><div className="route-mini"></div></div>
+  </div>;
 }
 
-function WorkoutView({ open, finished, sets, completedSets, onStart, onToggle, onAdd, onFinish }: { open: boolean; finished: boolean; sets: { kg: number; reps: number; done: boolean }[]; completedSets: number; onStart: () => void; onToggle: (index: number) => void; onAdd: () => void; onFinish: () => void }) {
-  if (!open) return (
-    <div className="page empty-state">
-      <span className="eyebrow">TRÄNINGSPASS</span><h1>Redo när du är.</h1><p>Starta dagens planerade styrkepass eller registrera en löprunda.</p>
-      <div className="start-options"><button className="today-card compact" onClick={onStart}><span>STYRKA</span><h2>Överkropp B</h2><p>6 övningar · cirka 50 min</p><strong>Starta →</strong></button><button className="run-option" onClick={onStart}><span>LÖPNING</span><h2>Logga en runda</h2><p>Distans, tid och känsla.</p><strong>Starta →</strong></button></div>
-    </div>
-  );
-
-  if (finished) return <div className="page completion"><div className="completion-mark">✓</div><span className="eyebrow">PASS SLUTFÖRT</span><h1>Snyggt jobbat.</h1><p>Du genomförde {completedSets} set. Passet är redo att sparas till din historik när Supabase-anslutningen aktiveras.</p><button className="primary-button" onClick={() => location.reload()}>Till översikten</button></div>;
-
-  return (
-    <div className="page workout-page">
-      <div className="workout-top"><div><span className="eyebrow">PÅGÅENDE · 12:48</span><h1>Överkropp B</h1><p>{completedSets} av {sets.length + 8} set klara</p></div><button className="finish-button" onClick={onFinish}>Avsluta pass</button></div>
-      <div className="workout-layout">
-        <section className="exercise-card">
-          <div className="exercise-title"><span>01</span><div><h2>Bänkpress</h2><p>Bröst · triceps</p></div><button>•••</button></div>
-          <div className="previous-result"><span>FÖRRA PASSET</span><strong>72,5 kg × 8</strong></div>
-          <div className="set-table">
-            <div className="set-head"><span>SET</span><span>KG</span><span>REPS</span><span>KLAR</span></div>
-            {sets.map((set, index) => <div className={`set-row ${set.done ? "set-done" : ""}`} key={index}><strong>{index + 1}</strong><button>{set.kg.toString().replace(".", ",")}</button><button>{set.reps}</button><button className="check-button" onClick={() => onToggle(index)}>{set.done ? "✓" : ""}</button></div>)}
-          </div>
-          <button className="add-set" onClick={onAdd}>＋ Lägg till set</button>
-        </section>
-        <aside className="up-next"><span className="section-kicker">NÄSTA ÖVNING</span><h2>Sittande rodd</h2><p>3 set × 10 reps</p><button>Nästa →</button><div className="session-note"><span>ANTECKNING</span><textarea aria-label="Anteckning för träningspasset" placeholder="Hur känns passet idag?"></textarea></div></aside>
-      </div>
-    </div>
-  );
+function Workout({ open, onStart, onAdapt }: { open: boolean; onStart: () => void; onAdapt: () => void }) {
+  const [done, setDone] = useState([true,true,true,false,false]);
+  if (!open) return <div className="view"><PageTop title="Pass" /><div className="empty-workout"><span>✦</span><h1>Dagens pass är redo.</h1><p>AI-coachen har balanserat volym och intensitet efter din återhämtning.</p><button className="gradient-button" onClick={onStart}>Starta pass</button></div></div>;
+  return <div className="view workout-view"><PageTop title="Styrka – Överkropp" back /><Image className="workout-cover" src="/workout-hero.png" width={900} height={506} alt="Muskler som tränas i dagens pass" priority /><div className="workout-meta"><span>◷ 60 min</span><span>◴ 5 övningar</span></div><button className="adapt-chip" onClick={onAdapt}>✦ AI-anpassa passet</button><div className="exercise-list">{exercises.map((e,i)=><button key={e[0]} onClick={()=>setDone(done.map((x,j)=>j===i?!x:x))}><span className="exercise-no">{String(i+1).padStart(2,"0")}</span><span><strong>{e[0]}</strong><small>{e[1]}</small></span><i className={done[i]?"checked":""}>{done[i]?"✓":""}</i></button>)}</div><button className="gradient-button sticky-action">{done.every(Boolean) ? "Slutför pass" : "Fortsätt pass"}</button></div>;
 }
 
-function ProgressView() {
-  return (
-    <div className="page progress-page">
-      <span className="eyebrow">DIN UTVECKLING</span><div className="progress-heading"><div><h1>Starkare. Snabbare.<br /><em>Vecka för vecka.</em></h1><p>All träning samlad på ett ställe.</p></div><button className="period-button">Senaste 12 veckorna⌄</button></div>
-      <section className="progress-feature">
-        <div><span className="section-kicker">STYRKA · BÄNKPRESS</span><strong>82,5 <small>kg</small></strong><p>Upp 10% sedan 20 maj</p></div>
-        <div className="large-chart">{[16, 21, 27, 35, 33, 45, 48, 57, 63, 72, 78, 91].map((h, i) => <i key={i} style={{ height: `${h}%` }}></i>)}</div>
-      </section>
-      <section className="achievement-grid"><Metric label="PERSONLIGA REKORD" value="9" detail="3 den här månaden" accent="lime" /><Metric label="SNITTEMPO LÖPNING" value="5:28" detail="−12 sek / km" accent="blue" /><Metric label="TOTAL VOLYM" value="42,6 ton" detail="↑ 8% på 12 veckor" accent="orange" /></section>
-    </div>
-  );
+function Planner({ plan, loading, onGenerate }: { plan: PlanDay[]; loading: boolean; onGenerate: () => void }) {
+  return <div className="view"><PageTop title="Planer" /><div className="segmented"><button className="active">Vecka</button><button>Månad</button></div><div className="calendar-head"><strong>Augusti 2026</strong><span>›</span></div><div className="calendar-row">{["M 10","T 11","O 12","T 13","F 14","L 15","S 16"].map((d,i)=><span className={i===3?"active":""} key={d}>{d.split(" ")[0]}<b>{d.split(" ")[1]}</b></span>)}</div><button className="generate-plan" onClick={onGenerate} disabled={loading}><span>✦</span><span><strong>{loading?"AI bygger din plan…":"Skapa ny plan med AI"}</strong><small>Anpassas efter mål, historik och återhämtning</small></span></button><div className="plan-list">{plan.map((p,i)=><div key={p.day}><span className={`plan-icon ${p.type}`}>{p.type==="run"?"♙":p.type==="recovery"?"◇":"♜"}</span><span><small>{p.day}</small><strong>{p.title}</strong><em>{p.meta}</em></span><i className={i===0?"checked":""}>{i===0?"✓":""}</i></div>)}</div><div className="coach-note"><span>✦</span><p><strong>AI-planering</strong>Planen utvecklas automatiskt när du tränar, vilar eller ändrar mål.</p></div></div>;
+}
+
+function Statistics() {
+  const metrics = [["Träningspass","4","av 6"],["Kcal förbränt","2 153","+15%"],["Träningstid","4 h 25","+10%"],["Snittpuls","128 bpm","+8%"]];
+  return <div className="view"><PageTop title="Statistik" /><div className="stats-tabs"><button className="active">Översikt</button><button>Träning</button><button>Kropp</button></div><div className="period">Denna vecka⌄</div><div className="metric-grid">{metrics.map((m,i)=><div key={m[0]}><small>{m[0]}</small><strong>{m[1]}</strong><em className={i===3?"red":""}>{m[2]}</em>{i<2&&<div className={i===0?"mini-bars":"mini-line"}>{i===0?[30,55,36,62,50,80,64].map((h,j)=><i key={j} style={{height:h}}/>):"⌁⌁⌁⌁"}</div>}</div>)}</div><section className="progress-card"><label>AI-PROGNOS · 8 VECKOR</label><h2>+7,5 kg i bänkpress</h2><p>Om du följer nuvarande plan med minst 85% kontinuitet.</p><div className="forecast-line">⌁⌁⌁⌁⌁</div></section></div>;
+}
+
+function Profile({ session }: { session: AccountSession }) {
+  const initials = session.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase();
+  const [userCount, setUserCount] = useState<number | null>(null);
+  const loadUsers = async () => {
+    const response = await fetch("/api/admin/users");
+    if (!response.ok) return;
+    const data = await response.json() as { users: unknown[] };
+    setUserCount(data.users.length);
+  };
+  return <div className="view"><PageTop title="Profil" /><div className="profile-hero"><span>{initials}</span><h2>{session.name}</h2><small>{session.role === "admin" ? "Administratör" : "Medlem"} · {session.email}</small></div><div className="profile-list"><button><span>◎</span><b>Mål & nivå</b><small>Styrka · 10 km</small><i>›</i></button><button><span>◷</span><b>Tillgänglig tid</b><small>4 pass / vecka</small><i>›</i></button><button><span>♡</span><b>Återhämtning</b><small>Apple Hälsa ansluten</small><i>›</i></button><button><span>✦</span><b>AI-inställningar</b><small>Proaktiv coachning på</small><i>›</i></button>{session.role === "admin" && <button onClick={() => void loadUsers()}><span>⚙</span><b>Administration</b><small>{userCount === null ? "Hantera användare" : `${userCount} registrerade användare`}</small><i>›</i></button>}<a className="profile-signout" href="/signout-with-chatgpt?return_to=%2F">Logga ut</a></div></div>;
+}
+
+function CoachSheet({ coach, loading, onClose, onAsk }: { coach: CoachReply; loading: boolean; onClose: () => void; onAsk: (s:string)=>void }) {
+  const [text,setText]=useState("");
+  return <div className="sheet-backdrop" onMouseDown={onClose}><section className="coach-sheet" onMouseDown={e=>e.stopPropagation()}><div className="sheet-handle"></div><button className="close" onClick={onClose}>×</button><div className="coach-title"><span>✦</span><div><small>TRÄNINGSGENIE AI</small><h2>Din personliga coach</h2></div></div><div className="coach-answer">{loading?<div className="thinking"><i></i><i></i><i></i></div>:<><strong>{coach.title}</strong><p>{coach.summary}</p>{coach.reason&&<small>{coach.reason}</small>}</>}</div><div className="quick-prompts"><button onClick={()=>onAsk("Gör dagens pass 30 minuter")}>Gör passet kortare</button><button onClick={()=>onAsk("Jag känner mig trött idag, anpassa träningen")}>Jag är trött idag</button></div><form onSubmit={e=>{e.preventDefault();if(text.trim()){onAsk(text);setText("")}}}><input value={text} onChange={e=>setText(e.target.value)} placeholder="Fråga din coach…"/><button>↑</button></form><small className="ai-disclaimer">AI-råd ersätter inte medicinsk bedömning.</small></section></div>;
+}
+
+function SectionTitle({title,action}:{title:string;action:string}) { return <div className="section-title"><strong>{title}</strong><button>{action}</button></div>; }
+
+function BottomNav({view,setView}:{view:View;setView:(v:View)=>void}) {
+  const items:[[View,string,string],[View,string,string],[View,string,string],[View,string,string],[View,string,string]]=[["hem","◆","Hem"],["pass","♧","Pass"],["statistik","▥","Statistik"],["planer","▣","Planer"],["profil","♙","Profil"]];
+  return <nav className="bottom-nav">{items.map(([v,icon,label])=><button className={view===v?"active":""} onClick={()=>setView(v)} key={v}><span>{icon}</span><small>{label}</small></button>)}</nav>;
 }
